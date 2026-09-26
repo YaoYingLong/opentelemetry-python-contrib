@@ -170,6 +170,7 @@ def _get_opentelemetry_values() -> dict[str, Any]:
 
 def _python_path_without_directory(python_path, directory, path_separator):
     return sub(
+        # 转义目录中的正则特殊字符，避免误匹配其他 PYTHONPATH 条目。
         rf"{escape(directory)}{path_separator}(?!$)",
         "",
         python_path,

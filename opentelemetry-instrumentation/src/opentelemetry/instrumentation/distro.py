@@ -48,6 +48,7 @@ class BaseDistro(ABC):
         skip loading entirely, etc.
         """
         instrumentor: BaseInstrumentor = entry_point.load()
+        # 默认实现通过 BaseInstrumentor.instrument() 调用具体的 _instrument()。
         instrumentor().instrument(**kwargs)
 
 

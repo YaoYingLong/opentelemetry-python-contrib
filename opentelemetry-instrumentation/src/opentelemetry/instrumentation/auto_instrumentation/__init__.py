@@ -25,6 +25,7 @@ from opentelemetry.util._importlib_metadata import entry_points
 _logger = getLogger(__name__)
 
 
+# pyproject.toml 将 opentelemetry-instrument 命令映射到此入口。
 def run() -> None:
     parser = ArgumentParser(
         description="""
@@ -47,6 +48,7 @@ def run() -> None:
 
     argument_otel_environment_variable = {}
 
+    # 从环境变量入口点注册对应的命令行参数。
     for entry_point in entry_points(group="opentelemetry_environment_variables"):
         environment_variable_module = entry_point.load()
 
@@ -105,6 +107,7 @@ def run() -> None:
     environ["PYTHONPATH"] = pathsep.join(python_path)
 
     executable = which(args.command)
+    # 用目标命令替换当前进程，保留上面设置的环境变量和 PYTHONPATH。
     execl(executable, executable, *args.command_args)
 
 
@@ -130,9 +133,13 @@ def _initialize(*, swallow_exceptions: bool = True) -> None:
                     raise
 
     try:
+        # 加载所选 Distro；没有匹配的入口点时使用 DefaultDistro。
         distro = _load_distro()
+        # 由 Distro 设置发行版所需的默认配置。
         distro.configure()
+        # 加载所选 Configurator 并执行其配置。
         _load_configurators()
+        # 加载已安装且依赖满足的插桩入口点。
         _load_instrumentors(distro)
     except Exception as exc:  # pylint: disable=broad-except
         _logger.exception("Failed to auto initialize OpenTelemetry")
@@ -157,6 +164,7 @@ def initialize(*, swallow_exceptions: bool = True) -> None:
     # where subprocesses spawned in the initialization phase execute the
     # initialization phase again, spawning more subprocesses.
     if python_path is not None:
+        # 使用当前模块的绝对目录，从 PYTHONPATH 中暂时移除自动插桩入口。
         environ["PYTHONPATH"] = _python_path_without_directory(python_path, filedir, pathsep)
 
     try:

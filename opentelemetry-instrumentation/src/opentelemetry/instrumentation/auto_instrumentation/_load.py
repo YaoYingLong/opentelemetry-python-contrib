@@ -46,6 +46,7 @@ class _EntryPointDistFinder:
         return f"{entry_point.group}:{entry_point.name}:{entry_point.value}"
 
 
+# 从 opentelemetry_distro 入口点选择 Distro，未找到时使用 DefaultDistro。
 def _load_distro() -> BaseDistro:
     distro_name = environ.get(OTEL_PYTHON_DISTRO, None)
     for entry_point in entry_points(group="opentelemetry_distro"):
@@ -94,6 +95,7 @@ def _load_instrumentors(distro):
                 continue
 
             # tell instrumentation to not run dep checks again as we already did it above
+            # 交由 Distro 处理入口点；默认实现会调用具体 Instrumentor。
             distro.load_instrumentor(entry_point, skip_dep_check=True)
             _logger.debug("Instrumented %s", entry_point.name)
         except DependencyConflictError as exc:
@@ -139,6 +141,7 @@ def _load_configurators():
             continue
         try:
             if configurator_name is None or configurator_name == entry_point.name:
+                # 实例化所选 Configurator，执行其配置。
                 entry_point.load()().configure(auto_instrumentation_version=__version__)  # type: ignore
                 configured = entry_point.name
             else:
