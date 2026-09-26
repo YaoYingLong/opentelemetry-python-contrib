@@ -1,0 +1,32 @@
+opentelemetry-instrumentation/src/opentelemetry/instrumentation/instrumentor.py
+  s_43d45cb12d99ba::t_e8c3a03a3a2952 97,114
+opentelemetry-instrumentation/src/opentelemetry/instrumentation/utils.py
+  s_43d45cb12d99ba::t_e8c3a03a3a2952 173
+opentelemetry-instrumentation/src/opentelemetry/instrumentation/distro.py
+  s_43d45cb12d99ba::t_e8c3a03a3a2952 51
+opentelemetry-instrumentation/src/opentelemetry/instrumentation/auto_instrumentation/_load.py
+  s_43d45cb12d99ba::t_e8c3a03a3a2952 49,144
+  s_43d45cb12d99ba::t_f8e020c708088e 98
+opentelemetry-instrumentation/src/opentelemetry/instrumentation/auto_instrumentation/sitecustomize.py
+  s_43d45cb12d99ba::t_f8e020c708088e 6
+opentelemetry-instrumentation/src/opentelemetry/instrumentation/auto_instrumentation/__init__.py
+  s_43d45cb12d99ba::t_e8c3a03a3a2952 28,51,110,136,138,140,142,167
+opentelemetry-instrumentation/src/opentelemetry/instrumentation/bootstrap.py
+  s_43d45cb12d99ba::t_450c3d5d69a4ef 123,143,159,163,166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9ba9b11bc250e3e318d2e8d88ec007ed5c873f54",
+  "prompts": {},
+  "sessions": {
+    "s_43d45cb12d99ba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0dd8c-c703-7db2-baf4-b7feb28a0053",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "yaoyinglong <yinglong.yao@ly.com>"
+    }
+  }
+}
