@@ -45,7 +45,7 @@ def _syscall(func):
 
     return wrapper
 
-
+# 装饰器
 @_syscall
 def _sys_pip_install(package):
     # explicit upgrade strategy to override potential pip config
@@ -120,6 +120,7 @@ def _run_install(default_instrumentations, libraries):
     _pip_check(libraries)
 
 
+# pyproject.toml 将 opentelemetry-bootstrap 命令注册到此入口。
 def run(
     default_instrumentations: list | None = None,
     libraries: list | None = None,
@@ -139,6 +140,7 @@ def run(
         action="version",
         version="%(prog)s " + __version__,
     )
+    # 默认输出依赖列表；-a install 才会安装插桩包。
     parser.add_argument(
         "-a",
         "--action",
@@ -154,11 +156,14 @@ def run(
     args = parser.parse_args()
 
     if libraries is None:
+        # 生成的第三方库与对应插桩包的映射。
         libraries = gen_libraries
 
     if default_instrumentations is None:
+        # 无需检测第三方库即可加入结果的默认插桩包。
         default_instrumentations = gen_default_instrumentations
 
+    # requirements 输出包名，install 安装匹配的包并检查依赖冲突。
     cmd = {
         action_install: _run_install,
         action_requirements: _run_requirements,

@@ -78,6 +78,7 @@ class BaseInstrumentor(ABC):
         dependencies = self.instrumentation_dependencies()
         return get_dependency_conflicts(dependencies)
 
+    # 在BaseDistro的load_instrumentor中被调用
     def instrument(self, **kwargs: Any):
         """Instrument the library
 
@@ -94,6 +95,7 @@ class BaseInstrumentor(ABC):
             return None
 
         # check if instrumentor has any missing or conflicting dependencies
+        # 手动调用默认检查依赖；自动插桩在加载入口点前已检查并传入 True。
         skip_dep_check = kwargs.pop("skip_dep_check", False)
         raise_exception_on_conflict = kwargs.pop("raise_exception_on_conflict", False)
         if not skip_dep_check:
@@ -110,6 +112,7 @@ class BaseInstrumentor(ABC):
         # initialize semantic conventions opt-in if needed
         _OpenTelemetrySemanticConventionStability._initialize()
 
+        # 调用具体插桩类的实现的_instrument方法，比如RequestsInstrumentor的_instrument方法
         result = self._instrument(  # pylint: disable=assignment-from-no-return
             **kwargs
         )

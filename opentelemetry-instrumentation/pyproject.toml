@@ -34,7 +34,10 @@ dependencies = [
 [project.scripts]
 opentelemetry-bootstrap = "opentelemetry.instrumentation.bootstrap:run"
 opentelemetry-instrument = "opentelemetry.instrumentation.auto_instrumentation:run"
-
+# Python的entry point是安装包写入的一张名称 → Python对象索引。它负责发现对象；
+# 是否导入、实例化和执行，由使用这张索引的代码决定。
+# opentelemetry_environment_variables是组名称，instrumentation是组内名称，冒号后面是获取的类
+# 构建并安装包时，这项声明会进入已安装包的 .dist-info/entry_points.txt 元数据。
 [project.entry-points.opentelemetry_environment_variables]
 instrumentation = "opentelemetry.instrumentation.environment_variables"
 

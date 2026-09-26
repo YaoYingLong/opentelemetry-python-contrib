@@ -26,6 +26,7 @@ class BaseDistro(ABC):
 
         return cls._instance
 
+    #python抽象方法的定义，用于一些默认配置的设置，比如OpenTelemetryDistro实现中，设置了默认的exporter
     @abstractmethod
     def _configure(self, **kwargs):
         """Configure the distribution"""
@@ -48,6 +49,7 @@ class BaseDistro(ABC):
         skip loading entirely, etc.
         """
         instrumentor: BaseInstrumentor = entry_point.load()
+        # 默认实现通过BaseInstrumentor.instrument()调用具体的_instrument()。
         instrumentor().instrument(**kwargs)
 
 
@@ -55,5 +57,5 @@ class DefaultDistro(BaseDistro):
     def _configure(self, **kwargs):
         pass
 
-
+# 使用*导入时被用到
 __all__ = ["BaseDistro", "DefaultDistro"]

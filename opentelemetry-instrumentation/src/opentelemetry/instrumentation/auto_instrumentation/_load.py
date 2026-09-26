@@ -46,13 +46,18 @@ class _EntryPointDistFinder:
         return f"{entry_point.group}:{entry_point.name}:{entry_point.value}"
 
 
+# 从 opentelemetry_distro 入口点选择 Distro，未找到时使用 DefaultDistro。
 def _load_distro() -> BaseDistro:
+    # 从环境变量获取OTEL_PYTHON_DISTRO对应的值
     distro_name = environ.get(OTEL_PYTHON_DISTRO, None)
+    # 这里其实就是获取的opentelemetry_distro模块中pyproject.toml中定义的project.entry-points.opentelemetry_distro
+    # 所以获取到的entry_point默认是opentelemetry.distro:OpenTelemetryDistro
     for entry_point in entry_points(group="opentelemetry_distro"):
         try:
             # If no distro is specified, use first to come up.
             if distro_name is None or distro_name == entry_point.name:
                 distro = entry_point.load()()
+                # 这里判断如果distro不是opentelemetry.instrumentation.distro:BaseDistro实例会输出日志，并跳过该distro
                 if not isinstance(distro, BaseDistro):
                     _logger.debug(
                         "%s is not an OpenTelemetry Distro. Skipping",
@@ -60,28 +65,37 @@ def _load_distro() -> BaseDistro:
                     )
                     continue
                 _logger.debug("Distribution %s will be configured", entry_point.name)
+                # 这里返回的是opentelemetry.distro:OpenTelemetryDistro实例
                 return distro
         except Exception as exc:  # pylint: disable=broad-except
             _logger.exception("Distribution %s configuration failed", entry_point.name)
             raise exc
+    # 这里返回是opentelemetry.instrumentation.distro:DefaultDistro实例
     return DefaultDistro()
 
 
 def _load_instrumentors(distro):
+    # 从OTEL_PYTHON_DISABLED_INSTRUMENTATIONS环境变量中获取需要排除的组件列表
     package_to_exclude = environ.get(OTEL_PYTHON_DISABLED_INSTRUMENTATIONS, [])
     entry_point_finder = _EntryPointDistFinder()
     if isinstance(package_to_exclude, str):
+        # 将获取到的排除的组件列表按照逗号分割成数组
         package_to_exclude = package_to_exclude.split(",")
         # to handle users entering "requests , flask" or "requests, flask" with spaces
+        # 将每一项去掉空格
         package_to_exclude = [x.strip() for x in package_to_exclude]
 
+    # 遍历执行所有的opentelemetry_pre_instrument，目前并没有任何组件中定义了
     for entry_point in entry_points(group="opentelemetry_pre_instrument"):
         entry_point.load()()
 
+    # 遍历执行所有的opentelemetry_pre_instrument
     for entry_point in entry_points(group="opentelemetry_instrumentor"):
+        # 如果排除列表中定义了*，表示排除所有组件的插桩，那直接退出
         if SKIPPED_INSTRUMENTATIONS_WILDCARD in package_to_exclude:
             break
 
+        # 如果加载的组件包含在需要排除的组件列表中，打印日志直接跳过
         if entry_point.name in package_to_exclude:
             _logger.debug("Instrumentation skipped for library %s", entry_point.name)
             continue
@@ -89,11 +103,13 @@ def _load_instrumentors(distro):
         try:
             entry_point_dist = entry_point_finder.dist_for(entry_point)
             conflict = get_dist_dependency_conflicts(entry_point_dist)
+            # 如果存在依赖冲突的组件也直接跳过
             if conflict:
                 conflict._log(_logger, entry_point.name)
                 continue
 
             # tell instrumentation to not run dep checks again as we already did it above
+            # 这里其实是调用的BaseDistro的load_instrumentor方法；调用具体instrumentor().instrument(**kwargs)方法
             distro.load_instrumentor(entry_point, skip_dep_check=True)
             _logger.debug("Instrumented %s", entry_point.name)
         except DependencyConflictError as exc:
@@ -122,13 +138,16 @@ def _load_instrumentors(distro):
             _logger.exception("Instrumenting of %s failed", entry_point.name)
             raise exc
 
+    # 遍历执行所有的opentelemetry_post_instrument，目前并没有任何组件中定义了
     for entry_point in entry_points(group="opentelemetry_post_instrument"):
         entry_point.load()()
 
 
 def _load_configurators():
+    # 从环境变量获取OTEL_PYTHON_CONFIGURATOR对应的值
     configurator_name = environ.get(OTEL_PYTHON_CONFIGURATOR, None)
     configured = None
+    # 这里其实就是获取的opentelemetry_distro模块中pyproject.toml中定义的opentelemetry.distro:OpenTelemetryConfigurator
     for entry_point in entry_points(group="opentelemetry_configurator"):
         if configured is not None:
             _logger.warning(
@@ -139,6 +158,8 @@ def _load_configurators():
             continue
         try:
             if configurator_name is None or configurator_name == entry_point.name:
+                # 实例化opentelemetry.distro:OpenTelemetryConfigurator执行其configure方法，这里其实是执行_OTelSDKConfigurator中的configure方法
+                # 如果环境变量中没有指定OTEL_CONFIG_FILE配置文件，这里什么都不会做，一般都没有指定
                 entry_point.load()().configure(auto_instrumentation_version=__version__)  # type: ignore
                 configured = entry_point.name
             else:

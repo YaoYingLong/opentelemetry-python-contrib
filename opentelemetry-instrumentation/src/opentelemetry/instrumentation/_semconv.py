@@ -208,7 +208,9 @@ class _OpenTelemetrySemanticConventionStability:
 
     @classmethod
     def _initialize(cls):
+        # 获取锁
         with cls._lock:
+            # 如果已经完成初始化直接退出
             if cls._initialized:
                 return
 
