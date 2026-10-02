@@ -248,6 +248,7 @@ from opentelemetry.util.http import (
 )
 from opentelemetry.util.http.httplib import set_ip_on_next_http_connection
 
+# 可以通过环境变量配置REQUESTS_EXCLUDED_URLS和EXCLUDED_URLS，用于排除不需要拦截的url列表
 _excluded_urls_from_env = get_excluded_urls("REQUESTS")
 
 _RequestHookT = Callable[[Span, PreparedRequest], None] | None
@@ -305,8 +306,11 @@ def _instrument(
     # before v1.0.0, Dec 17, 2012, see
     # https://github.com/psf/requests/commit/4e5c4a6ab7bb0195dececdd19bb8505b872fe120)
 
+    # 核心原理：运行时替换requests.sessions.Session.send，在原方法前后创建CLIENT Span、注入上下文传播头、采集响应信息和耗时
+    # 并通过上下文中的标记抑制嵌套HTTP插桩。
     wrapped_send = Session.send
 
+    # Session.send方法的定义：def send(self, request: PreparedRequest, **kwargs: Any) -> Response:
     # pylint: disable-msg=too-many-locals,too-many-branches
     @functools.wraps(wrapped_send)
     def instrumented_send(self: Session, request: PreparedRequest, **kwargs: Any):
@@ -317,6 +321,7 @@ def _instrument(
             request.headers = request.headers if request.headers is not None else CaseInsensitiveDict()
             return request.headers
 
+        # 用来判断当前OpenTelemetry Context是否允许执行HTTP插桩逻辑。它的主要用途是临时抑制HTTP遥测，尤其是避免同一次请求在不同HTTP库中重复插桩
         if not is_http_instrumentation_enabled():
             return wrapped_send(self, request, **kwargs)
 
@@ -389,24 +394,32 @@ def _instrument(
         except ValueError:
             pass
 
+        # with进入时，调用__enter__()，__enter__()推进生成器，直到执行到yield span
+        # next(self.gen)得到被yield出来的Span，__enter__()返回该Span，外层as span接收这个返回值
+        # with结束会自动调用span的end方法
         with (
+            # 这里的 as span，拿到的就是你那段代码中 yield span 交出来的对象
             tracer.start_as_current_span(span_name, kind=SpanKind.CLIENT, attributes=span_attributes) as span,
             set_ip_on_next_http_connection(span),
         ):
             exception = None
             if callable(request_hook):
                 request_hook(span, request)
-
+            # 执行TextMapPropagator的inject方法，注入header如traceparent、tracestate、baggage等
             inject(headers)
-
+            # Requests 底层通常调用 urllib3。如果两者都启用插桩，同一次请求可能经过两个插桩入口
+            # 这个上下文管理器通过OpenTelemetry Context 置抑制标记，并在退出时恢复原上下文。
+            # urllib3的包装入口也检查is_http_instrumentation_enabled()，因此在这个范围内会直接执行原方法
             with suppress_http_instrumentation():
                 start_time = default_timer()
                 try:
+                    # 执行原始的Session.send方法
                     result = wrapped_send(self, request, **kwargs)  # *** PROCEED
                 except Exception as exc:  # pylint: disable=W0703
                     exception = exc
                     result = getattr(exc, "response", None)
                 finally:
+                    # 记录耗时时间
                     elapsed_time = max(default_timer() - start_time, 0)
 
             if isinstance(result, Response):
@@ -448,6 +461,7 @@ def _instrument(
                 span.set_attribute(ERROR_TYPE, type(exception).__qualname__)
                 metric_labels[ERROR_TYPE] = type(exception).__qualname__
 
+            # 记录指标
             if duration_histogram_old is not None:
                 duration_attrs_old = _filter_semconv_duration_attrs(
                     metric_labels,
@@ -459,6 +473,7 @@ def _instrument(
                     max(round(elapsed_time * 1000), 0),
                     attributes=duration_attrs_old,
                 )
+            # 记录指标
             if duration_histogram_new is not None:
                 duration_attrs_new = _filter_semconv_duration_attrs(
                     metric_labels,
@@ -474,6 +489,7 @@ def _instrument(
         return result
 
     instrumented_send.opentelemetry_instrumentation_requests_applied = True
+    # 这一步非常关键，否则就不能实现装饰器的作用，这里其实相当于没有使用装饰器@的语法糖，直接手动实现的装饰器
     Session.send = instrumented_send
 
 
@@ -534,10 +550,14 @@ class RequestsInstrumentor(BaseInstrumentor):
                 ``excluded_urls``: A string containing a comma-delimited list of regexes used to exclude URLs from tracking
                 ``duration_histogram_boundaries``: A list of float values representing the explicit bucket boundaries for the duration histogram.
         """
+        # 获取HTTP的语义约定的类型
         semconv_opt_in_mode = _OpenTelemetrySemanticConventionStability._get_opentelemetry_stability_opt_in_mode(
             _OpenTelemetryStabilitySignalType.HTTP,
         )
+        # 如果是旧的约定、或者同时支持新旧约定返回：https://opentelemetry.io/schemas/1.11.0
+        # 如果是新的约定返回：https://opentelemetry.io/schemas/1.21.0
         schema_url = _get_schema_url(semconv_opt_in_mode)
+        # 这里一般来说默认是没有传入tracer_provider，所以这里获取到的是None
         tracer_provider = kwargs.get("tracer_provider")
         tracer = get_tracer(
             __name__,
@@ -555,8 +575,11 @@ class RequestsInstrumentor(BaseInstrumentor):
             schema_url=schema_url,
         )
         duration_histogram_old = None
+        # 如果semconv_opt_in_mode是旧的约定或者同时支持新旧约定
         if _report_old(semconv_opt_in_mode):
+            #
             duration_histogram_old = meter.create_histogram(
+                # 指标名称http.client.duration
                 name=MetricInstruments.HTTP_CLIENT_DURATION,
                 unit="ms",
                 description="measures the duration of the outbound HTTP request",
@@ -564,8 +587,10 @@ class RequestsInstrumentor(BaseInstrumentor):
                 or HTTP_DURATION_HISTOGRAM_BUCKETS_OLD,
             )
         duration_histogram_new = None
+        # 如果semconv_opt_in_mode是新的约定或者同时支持新旧约定
         if _report_new(semconv_opt_in_mode):
             duration_histogram_new = meter.create_histogram(
+                # 指标名称http.client.request.duration
                 name=HTTP_CLIENT_REQUEST_DURATION,
                 unit="s",
                 description="Duration of HTTP client requests.",

@@ -162,6 +162,7 @@ def _getstate() -> _ConnectionState | None:
 @contextlib.contextmanager
 def set_ip_on_next_http_connection(span: Span):
     state = _getstate()
+    # 如果state不存在
     if not state:
         token = context.attach(context.set_value(_STATE_KEY, {"need_ip": [span]}))
         try:
@@ -170,6 +171,7 @@ def set_ip_on_next_http_connection(span: Span):
             if token:
                 context.detach(token)
     else:
+        # 如果state已经存在，
         spans = state["need_ip"]
         spans.append(span)
         try:

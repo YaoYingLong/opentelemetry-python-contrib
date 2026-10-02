@@ -159,7 +159,7 @@ def _load_configurators():
         try:
             if configurator_name is None or configurator_name == entry_point.name:
                 # 实例化opentelemetry.distro:OpenTelemetryConfigurator执行其configure方法，这里其实是执行_OTelSDKConfigurator中的configure方法
-                # 如果环境变量中没有指定OTEL_CONFIG_FILE配置文件，这里什么都不会做，一般都没有指定
+                # 如果环境变量中有指定OTEL_CONFIG_FILE配置文件，需要解析配置文件，一般都没有指定
                 entry_point.load()().configure(auto_instrumentation_version=__version__)  # type: ignore
                 configured = entry_point.name
             else:

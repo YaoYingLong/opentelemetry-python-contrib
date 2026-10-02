@@ -158,17 +158,19 @@ _server_duration_attrs_new = [
     URL_SCHEME,
 ]
 
+# 旧的约定
 _server_active_requests_count_attrs_old = [
-    HTTP_METHOD,
-    HTTP_HOST,
-    HTTP_SCHEME,
+    HTTP_METHOD,        # http.method
+    HTTP_HOST,          #
+    HTTP_SCHEME,        # http.scheme
     HTTP_FLAVOR,
     HTTP_SERVER_NAME,
 ]
 
+# 新的约定
 _server_active_requests_count_attrs_new = [
-    HTTP_REQUEST_METHOD,
-    URL_SCHEME,
+    HTTP_REQUEST_METHOD,    # http.request.method
+    URL_SCHEME,             # url.scheme
     # TODO: Support SERVER_ADDRESS AND SERVER_PORT
 ]
 
@@ -177,13 +179,13 @@ OTEL_SEMCONV_STABILITY_OPT_IN = "OTEL_SEMCONV_STABILITY_OPT_IN"
 # Legacy/default schema version when schema_url was first introduced
 _LEGACY_SCHEMA_VERSION = "1.11.0"
 
-
+# 作为_OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING的Key
 class _OpenTelemetryStabilitySignalType(Enum):
     HTTP = "http"
     DATABASE = "database"
     GEN_AI = "gen_ai"
 
-
+# 作为_OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING的value
 class _StabilityMode(Enum):
     DEFAULT = "default"
     HTTP = "http"
@@ -200,7 +202,12 @@ def _report_new(mode: _StabilityMode):
 def _report_old(mode: _StabilityMode):
     return mode not in (_StabilityMode.HTTP, _StabilityMode.DATABASE)
 
-
+# 是一个管理新旧语义约定切换的内部配置类：它读取环境变量，告诉插桩应该输出旧格式、新格式，还是同时输出两种格式
+# 插桩通过 _get_opentelemetry_stability_opt_in_mode(...) 获取所属领域的模式
+# 插桩和辅助函数根据模式，选择属性、指标以及 schema_url
+# 环境变量值如果是未设置，默认返回HTTP模式，输出行为使用旧约定
+# 环境变量值如果是设置的http，默认返回DEFAULT模式，输出行为使用新约定
+# 环境变量值如果是设置的http/dup，默认返回HTTP_DUP模式，同时输出新旧约定
 class _OpenTelemetrySemanticConventionStability:
     _initialized = False
     _lock = threading.Lock()
@@ -216,8 +223,11 @@ class _OpenTelemetrySemanticConventionStability:
 
             # Users can pass in comma delimited string for opt-in options
             # Only values for http, gen ai, and database stability are supported for now
+            # 用户可传入以逗号分隔的字符串，用于指定启用选项
+            # 当前仅支持 http、gen ai 和 database stability 这几项配置
             opt_in = os.environ.get(OTEL_SEMCONV_STABILITY_OPT_IN)
 
+            # 如果没有配置OTEL_SEMCONV_STABILITY_OPT_IN环境变量
             if not opt_in:
                 # early return in case of default
                 cls._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING = {
@@ -227,19 +237,22 @@ class _OpenTelemetrySemanticConventionStability:
                 }
                 cls._initialized = True
                 return
-
+            # 如果有配置OTEL_SEMCONV_STABILITY_OPT_IN环境变量，将逗号分隔的内容才开为数组
             opt_in_list = [s.strip() for s in opt_in.split(",")]
 
+            # 这里其实就是按照同时新旧约定、新约定、默认旧约定的优先级来设置HTTP的输出
             cls._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING[_OpenTelemetryStabilitySignalType.HTTP] = cls._filter_mode(
                 opt_in_list, _StabilityMode.HTTP, _StabilityMode.HTTP_DUP
             )
 
+            # 这里其实就是按照同时新旧约定、新约定、默认旧约定的优先级来设置GEN_AI的输出
             cls._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING[_OpenTelemetryStabilitySignalType.GEN_AI] = cls._filter_mode(
                 opt_in_list,
                 _StabilityMode.DEFAULT,
                 _StabilityMode.GEN_AI_LATEST_EXPERIMENTAL,
             )
 
+            # 这里其实就是按照同时新旧约定、新约定、默认旧约定的优先级来设置DATABASE的输出
             cls._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING[_OpenTelemetryStabilitySignalType.DATABASE] = cls._filter_mode(
                 opt_in_list,
                 _StabilityMode.DATABASE,
@@ -251,9 +264,10 @@ class _OpenTelemetrySemanticConventionStability:
     def _filter_mode(opt_in_list, stable_mode, dup_mode):
         # Process semconv stability opt-in
         # http/dup,database/dup has higher precedence over http,database
+        # 如果是dup_mode的值包含在opt_in_list中直接返回dup_mode，这样新旧约定的字段都会被输出
         if dup_mode.value in opt_in_list:
             return dup_mode
-
+        # 如果新的约定包含在opt_in_list中，就实现用新的约定，否则使用默认即旧的约定
         return stable_mode if stable_mode.value in opt_in_list else _StabilityMode.DEFAULT
 
     @classmethod
@@ -676,7 +690,9 @@ def _get_schema_url(mode: _StabilityMode) -> str:
     _get_schema_url_for_signal_types()
     """
     if mode is _StabilityMode.DEFAULT:
+        # 如果是旧的约定返回：https://opentelemetry.io/schemas/1.11.0
         return f"https://opentelemetry.io/schemas/{_LEGACY_SCHEMA_VERSION}"
+    # 如果是新的约定返回：https://opentelemetry.io/schemas/1.21.0
     return Schemas.V1_21_0.value
 
 
