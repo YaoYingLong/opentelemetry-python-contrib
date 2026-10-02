@@ -537,6 +537,7 @@ class RequestsInstrumentor(BaseInstrumentor):
     """
 
     def instrumentation_dependencies(self) -> Collection[str]:
+        # 返回的是package.py中定义的内容
         return _instruments
 
     def _instrument(self, **kwargs: Any):
